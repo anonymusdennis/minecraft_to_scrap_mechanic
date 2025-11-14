@@ -445,57 +445,12 @@ def hollow_out_blueprint(blueprint):
         if distance.get(key, 0) <= 1:
             kept_parts.append(part)
     
-    # Verify connectivity - ensure no floating parts
-    # Mark all surface-connected voxels
-    if len(kept_parts) > 0:
-        connected = set()
-        queue = deque()
-        
-        # Start from any surface voxel
-        first_key = None
-        for part in kept_parts:
-            pos = part['pos']
-            key = (pos['x'], pos['y'], pos['z'])
-            if distance.get(key, 0) == 0:
-                first_key = key
-                break
-        
-        if first_key:
-            connected.add(first_key)
-            queue.append(first_key)
-            
-            # Build position map for kept parts only
-            kept_position_map = {}
-            for i, part in enumerate(kept_parts):
-                pos = part['pos']
-                key = (pos['x'], pos['y'], pos['z'])
-                kept_position_map[key] = i
-            
-            # Flood fill to find all connected voxels
-            while queue:
-                current = queue.popleft()
-                x, y, z = current
-                
-                neighbors = [
-                    (x+1, y, z), (x-1, y, z),
-                    (x, y+1, z), (x, y-1, z),
-                    (x, y, z+1), (x, y, z-1)
-                ]
-                
-                for neighbor in neighbors:
-                    if neighbor in kept_position_map and neighbor not in connected:
-                        connected.add(neighbor)
-                        queue.append(neighbor)
-            
-            # Keep only connected parts
-            final_parts = []
-            for part in kept_parts:
-                pos = part['pos']
-                key = (pos['x'], pos['y'], pos['z'])
-                if key in connected:
-                    final_parts.append(part)
-            
-            kept_parts = final_parts
+    # NOTE: Removed connectivity verification that was causing the bug where only
+    # one block's voxels were kept. The connectivity check assumed all voxels should
+    # be touching, but when assembling from individual block blueprints spaced
+    # VOXEL_SCALE (16) units apart, blocks are intentionally not touching.
+    # The distance-based filtering above is sufficient to hollow out each block
+    # individually while preserving all blocks in the structure.
     
     # Update blueprint with kept parts
     blueprint['bodies'][0]['childs'] = kept_parts
