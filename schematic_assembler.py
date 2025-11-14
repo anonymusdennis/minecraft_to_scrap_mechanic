@@ -15,6 +15,7 @@ import os
 import sys
 from uuid import uuid4
 from block_ids import get_block_name
+from blueprint_writer import generate_preview_image
 
 
 def parse_schematic(schematic_path):
@@ -303,9 +304,63 @@ def rotate_position(pos, xaxis, zaxis):
         return {'x': x, 'y': y, 'z': z}
 
 
-def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_name):
+def hollow_out_blueprint(blueprint):
+    """
+    Remove interior parts from a blueprint, keeping only the outer shell.
+    This significantly reduces part count for large structures.
+    
+    :param blueprint: Blueprint dict with 'bodies' containing 'childs' list
+    :return: Modified blueprint with interior parts removed
+    """
+    if not blueprint.get('bodies') or not blueprint['bodies'][0].get('childs'):
+        return blueprint
+    
+    parts = blueprint['bodies'][0]['childs']
+    
+    if len(parts) == 0:
+        return blueprint
+    
+    # Build a set of all occupied positions
+    position_map = {}
+    for i, part in enumerate(parts):
+        pos = part['pos']
+        key = (pos['x'], pos['y'], pos['z'])
+        position_map[key] = i
+    
+    # Determine which parts are on the surface
+    surface_parts = []
+    
+    for part in parts:
+        pos = part['pos']
+        x, y, z = pos['x'], pos['y'], pos['z']
+        
+        # Check all 6 neighbors
+        neighbors = [
+            (x+1, y, z), (x-1, y, z),
+            (x, y+1, z), (x, y-1, z),
+            (x, y, z+1), (x, y, z-1)
+        ]
+        
+        # If any neighbor is missing, this is a surface part
+        is_surface = False
+        for neighbor in neighbors:
+            if neighbor not in position_map:
+                is_surface = True
+                break
+        
+        if is_surface:
+            surface_parts.append(part)
+    
+    # Update blueprint with only surface parts
+    blueprint['bodies'][0]['childs'] = surface_parts
+    
+    return blueprint
+
+def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_name, hollow=False):
     """
     Assemble a large blueprint from schematic data using individual block blueprints.
+    
+    :param hollow: if True, hollow out interior parts to reduce part count
     """
     print(f"Assembling blueprint from {len(schematic_data['blocks'])} blocks...")
     
@@ -398,6 +453,14 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
             blueprint["bodies"][0]["childs"].append(part)
             stats['blocks_added'] += 1
     
+    # Hollow out if requested
+    if hollow:
+        original_count = len(blueprint["bodies"][0]["childs"])
+        print(f"\nHollowing out blueprint...")
+        blueprint = hollow_out_blueprint(blueprint)
+        new_count = len(blueprint["bodies"][0]["childs"])
+        print(f"  Parts reduced: {original_count} -> {new_count} ({100*(1-new_count/original_count):.1f}% reduction)")
+    
     # Write blueprint.json
     blueprint_path = os.path.join(bp_folder, "blueprint.json")
     with open(blueprint_path, 'w') as f:
@@ -414,6 +477,20 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
     desc_path = os.path.join(bp_folder, "description.json")
     with open(desc_path, 'w') as f:
         json.dump(desc, f, indent=2)
+    
+    # Generate preview image from blueprint parts
+    print(f"\nGenerating preview image...")
+    voxel_colors = {}
+    for part in blueprint["bodies"][0]["childs"]:
+        pos = part['pos']
+        # Convert hex color back to RGB
+        color_hex = part['color']
+        r = int(color_hex[0:2], 16)
+        g = int(color_hex[2:4], 16)
+        b = int(color_hex[4:6], 16)
+        voxel_colors[(pos['x'], pos['y'], pos['z'])] = (r, g, b, 255)
+    
+    generate_preview_image(voxel_colors, bp_folder)
     
     # Print statistics
     print(f"\nAssembly complete!")
@@ -454,6 +531,11 @@ def main():
         default="MinecraftSchematic",
         help="Name for the assembled blueprint (default: MinecraftSchematic)"
     )
+    parser.add_argument(
+        "--hollow",
+        action="store_true",
+        help="Hollow out the blueprint to remove interior parts and reduce part count. Recommended for large structures to prevent crashes."
+    )
     
     args = parser.parse_args()
     
@@ -476,7 +558,7 @@ def main():
     print(f"  Non-air blocks: {len(schematic_data['blocks'])}")
     
     # Assemble blueprint
-    assemble_blueprint(schematic_data, args.blueprints, args.output, args.name)
+    assemble_blueprint(schematic_data, args.blueprints, args.output, args.name, hollow=args.hollow)
     
     return 0
 
