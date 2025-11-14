@@ -502,6 +502,45 @@ def hollow_out_blueprint(blueprint):
     
     return blueprint
 
+def deduplicate_voxels(blueprint):
+    """
+    Remove overlapping voxels that occupy the same position.
+    When multiple voxels exist at the same position, keeps only the last one added.
+    This prevents game crashes caused by overlapping parts.
+    
+    :param blueprint: Blueprint dict with 'bodies' containing 'childs' list
+    :return: Modified blueprint with overlapping voxels removed
+    """
+    if not blueprint.get('bodies') or not blueprint['bodies'][0].get('childs'):
+        return blueprint
+    
+    parts = blueprint['bodies'][0]['childs']
+    
+    if len(parts) == 0:
+        return blueprint
+    
+    # Deduplicate by rebuilding with unique positions only
+    # Process in reverse to keep the last occurrence at each position
+    final_parts = []
+    seen_positions = set()
+    
+    for part in reversed(parts):
+        pos = part['pos']
+        key = (pos['x'], pos['y'], pos['z'])
+        
+        if key not in seen_positions:
+            seen_positions.add(key)
+            final_parts.append(part)
+    
+    # Reverse back to maintain original order
+    final_parts.reverse()
+    
+    # Update blueprint with deduplicated parts
+    blueprint['bodies'][0]['childs'] = final_parts
+    
+    return blueprint
+
+
 def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_name, hollow=False, assets_dir=None, generate_on_demand=False):
     """
     Assemble a large blueprint from schematic data using individual block blueprints.
@@ -510,7 +549,13 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
     :param assets_dir: Path to Minecraft assets for on-demand block generation
     :param generate_on_demand: If True, generate missing blocks on-demand instead of using pre-generated blueprints
     """
+    # Minecraft blocks are 1m cubes, but Scrap Mechanic blocks are made of 16x16x16 voxels (each voxel is 0.25m)
+    # Therefore, we need to scale Minecraft coordinates by 16 to get proper Scrap Mechanic voxel positions
+    VOXEL_SCALE = 16
+    
     print(f"Assembling blueprint from {len(schematic_data['blocks'])} blocks...")
+    print(f"Schematic dimensions: {schematic_data['width']}x{schematic_data['height']}x{schematic_data['length']} blocks")
+    print(f"Using voxel scale factor: {VOXEL_SCALE} (Minecraft 1m block = {VOXEL_SCALE} Scrap Mechanic voxels)")
     
     if generate_on_demand:
         if not assets_dir:
@@ -535,7 +580,10 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
         'total_blocks': 0,
         'blocks_added': 0,
         'blocks_skipped': 0,
-        'missing_blueprints': set()
+        'missing_blueprints': set(),
+        'voxels_before_dedup': 0,
+        'voxels_after_dedup': 0,
+        'overlapping_voxels_removed': 0
     }
     
     # Cache for loaded blueprints to avoid repeated disk access
@@ -547,7 +595,7 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
         
         # Progress logging every 100 blocks
         if idx % 100 == 0:
-            print(f"Processing block {idx + 1}/{len(schematic_data['blocks'])}...")
+            print(f"Processing block {idx + 1}/{len(schematic_data['blocks'])} ({100*idx//len(schematic_data['blocks'])}%)...")
         
         # Get block position in schematic
         base_x = mc_block['x']
@@ -556,7 +604,11 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
         block_name = mc_block['name']
         data_value = mc_block['data']
         
-        # Determine rotation
+        # Log first few blocks for debugging
+        if idx < 3:
+            print(f"  Block {idx}: '{block_name}' at MC pos ({base_x}, {base_y}, {base_z}), data={data_value}")
+        
+        # Determine rotation for the entire block
         xaxis, zaxis = determine_rotation(block_name, data_value)
         
         # Load blueprint for this block type (with caching)
@@ -565,6 +617,8 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
         else:
             block_blueprints = load_blueprint_blocks(blueprints_folder, block_name, assets_dir, generate_on_demand)
             blueprint_cache[block_name] = block_blueprints
+            if idx < 3 and block_blueprints:
+                print(f"    Loaded blueprint with {len(block_blueprints)} voxels")
         
         if not block_blueprints:
             stats['blocks_skipped'] += 1
@@ -576,6 +630,8 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
                 'shapeId': '628b2d61-5ceb-43e9-8334-a4135566df7a',  # Plastic
                 'bounds': {'x': 1, 'y': 1, 'z': 1}
             }]
+            if idx < 3:
+                print(f"    Using default gray cube fallback")
         
         # Add each voxel from the block blueprint
         for voxel in block_blueprints:
@@ -585,28 +641,47 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
             # Rotate relative position according to block rotation
             rotated_pos = rotate_position(rel_pos, xaxis, zaxis)
             
-            # Calculate absolute position in the large blueprint
+            # Calculate absolute position in the large blueprint with proper scaling
+            # Key fix: Multiply Minecraft block coordinates by VOXEL_SCALE (16)
+            # to properly space blocks in the voxel grid
             # Note: Scrap Mechanic uses different axis mapping than Minecraft
             # MC: X=east, Y=up, Z=south
             # SM: X=right, Y=forward, Z=up
             abs_pos = {
-                'x': base_x + rotated_pos['x'],
-                'y': base_z + rotated_pos['z'],  # MC Z -> SM Y
-                'z': base_y + rotated_pos['y']   # MC Y -> SM Z
+                'x': base_x * VOXEL_SCALE + rotated_pos['x'],
+                'y': base_z * VOXEL_SCALE + rotated_pos['z'],  # MC Z -> SM Y
+                'z': base_y * VOXEL_SCALE + rotated_pos['y']   # MC Y -> SM Z
             }
             
+            if idx < 3 and len(blueprint["bodies"][0]["childs"]) < 2:
+                print(f"      Voxel at relative ({rel_pos['x']}, {rel_pos['y']}, {rel_pos['z']}) -> absolute SM ({abs_pos['x']}, {abs_pos['y']}, {abs_pos['z']})")
+            
             # Create block entry for blueprint
+            # Use the block's rotation for ALL voxels (consistent rotation)
             part = {
                 "bounds": voxel.get('bounds', {"x": 1, "y": 1, "z": 1}),
                 "shapeId": voxel.get('shapeId', '628b2d61-5ceb-43e9-8334-a4135566df7a'),
                 "color": voxel.get('color', '808080'),
                 "pos": abs_pos,
-                "xaxis": xaxis,
-                "zaxis": zaxis
+                "xaxis": xaxis,  # Use block rotation, not voxel-specific rotation
+                "zaxis": zaxis   # Use block rotation, not voxel-specific rotation
             }
             
             blueprint["bodies"][0]["childs"].append(part)
             stats['blocks_added'] += 1
+    
+    stats['voxels_before_dedup'] = len(blueprint["bodies"][0]["childs"])
+    
+    # Remove overlapping voxels (same position) - these can crash the game
+    print(f"\nRemoving overlapping voxels...")
+    blueprint = deduplicate_voxels(blueprint)
+    stats['voxels_after_dedup'] = len(blueprint["bodies"][0]["childs"])
+    stats['overlapping_voxels_removed'] = stats['voxels_before_dedup'] - stats['voxels_after_dedup']
+    
+    if stats['overlapping_voxels_removed'] > 0:
+        print(f"  Removed {stats['overlapping_voxels_removed']} overlapping voxels ({100*stats['overlapping_voxels_removed']//stats['voxels_before_dedup']}% reduction)")
+    else:
+        print(f"  No overlapping voxels found")
     
     # Hollow out if requested
     if hollow:
@@ -648,17 +723,28 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
     generate_preview_image(voxel_colors, bp_folder)
     
     # Print statistics
-    print(f"\nAssembly complete!")
-    print(f"  Total MC blocks: {stats['total_blocks']}")
-    print(f"  Voxels added: {stats['blocks_added']}")
-    print(f"  Blocks skipped: {stats['blocks_skipped']}")
+    print(f"\n{'='*60}")
+    print(f"Assembly complete!")
+    print(f"{'='*60}")
+    print(f"  Total MC blocks processed: {stats['total_blocks']}")
+    print(f"  Blocks skipped (missing): {stats['blocks_skipped']}")
+    print(f"  Initial voxels placed: {stats['voxels_before_dedup']}")
+    print(f"  Overlapping voxels removed: {stats['overlapping_voxels_removed']}")
+    print(f"  Voxels after deduplication: {stats['voxels_after_dedup']}")
+    if hollow:
+        print(f"  Final voxel count (after hollowing): {len(blueprint['bodies'][0]['childs'])}")
+    print(f"\n  Final blueprint size: {len(blueprint['bodies'][0]['childs'])} voxels")
+    
     if stats['missing_blueprints']:
-        print(f"  Missing blueprints ({len(stats['missing_blueprints'])}):")
+        print(f"\n  Missing blueprints ({len(stats['missing_blueprints'])}):")
         for name in sorted(stats['missing_blueprints'])[:10]:
             print(f"    - {name}")
         if len(stats['missing_blueprints']) > 10:
             print(f"    ... and {len(stats['missing_blueprints']) - 10} more")
-    print(f"\nBlueprint saved to: {bp_folder}")
+    
+    print(f"\n{'='*60}")
+    print(f"Blueprint saved to: {bp_folder}")
+    print(f"{'='*60}")
     
     return bp_folder
 
