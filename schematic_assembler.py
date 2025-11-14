@@ -18,43 +18,121 @@ from block_ids import get_block_name
 from blueprint_writer import generate_preview_image, rgba_to_hex, get_shape_id_for_block
 
 
+def parse_block_state(block_state):
+    """
+    Parse a block state string like "minecraft:stone" or "minecraft:oak_stairs[facing=east,half=bottom]"
+    Returns (block_name, properties_dict)
+    """
+    # Remove minecraft: prefix if present
+    if ':' in block_state:
+        block_state = block_state.split(':', 1)[1]
+    
+    # Split block name from properties
+    if '[' in block_state:
+        block_name = block_state.split('[')[0]
+        # Extract properties (if needed in the future)
+        props_str = block_state.split('[')[1].rstrip(']')
+        properties = {}
+        if props_str:
+            for prop in props_str.split(','):
+                if '=' in prop:
+                    key, value = prop.split('=', 1)
+                    properties[key] = value
+        return block_name, properties
+    else:
+        return block_state, {}
+
+
 def parse_schematic(schematic_path):
     """
-    Parse a Minecraft schematic JSON file.
+    Parse a Minecraft schematic JSON file (supports both old and new WorldEdit formats).
     Returns a dict with width, height, length, and list of blocks with positions.
     """
     with open(schematic_path, 'r') as f:
         data = json.load(f)
     
-    schematic = data.get('Schematic', {})
+    # Handle both root-level Schematic and nested structure (e.g., "": {"Schematic": {...}})
+    if 'Schematic' in data:
+        schematic = data['Schematic']
+    elif '' in data and 'Schematic' in data['']:
+        schematic = data['']['Schematic']
+    else:
+        raise ValueError("Invalid schematic format: 'Schematic' key not found")
+    
     width = schematic['Width']
     height = schematic['Height']
     length = schematic['Length']
-    blocks = schematic['Blocks']
-    block_data = schematic['Data']
     
-    # Parse blocks into list of (x, y, z, block_id, data_value)
-    # Schematic stores blocks in YZX order
+    # Detect format version
+    blocks_data = schematic['Blocks']
+    
+    # Check if this is the new WorldEdit format (Version 3+)
+    # New format has Blocks as a dict with 'Palette' and 'Data'
+    # Old format has Blocks as a list/array
+    is_new_format = isinstance(blocks_data, dict) and 'Palette' in blocks_data and 'Data' in blocks_data
+    
     block_list = []
-    for y in range(height):
-        for z in range(length):
-            for x in range(width):
-                index = (y * length + z) * width + x
-                block_id = blocks[index]
-                data_value = block_data[index]
-                
-                # Skip air blocks
-                if block_id == 0:
-                    continue
-                
-                block_list.append({
-                    'x': x,
-                    'y': y,
-                    'z': z,
-                    'block_id': block_id,
-                    'data': data_value,
-                    'name': get_block_name(block_id, data_value)
-                })
+    
+    if is_new_format:
+        # New WorldEdit format (Version 3+)
+        palette = blocks_data['Palette']
+        data_array = blocks_data['Data']
+        
+        # Create reverse mapping: palette_id -> block_state_string
+        id_to_block_state = {v: k for k, v in palette.items()}
+        
+        # Parse blocks into list of (x, y, z, block_name, properties)
+        # Schematic stores blocks in YZX order
+        for y in range(height):
+            for z in range(length):
+                for x in range(width):
+                    index = (y * length + z) * width + x
+                    palette_id = data_array[index]
+                    
+                    # Get block state from palette
+                    block_state = id_to_block_state.get(palette_id, 'minecraft:air')
+                    block_name, properties = parse_block_state(block_state)
+                    
+                    # Skip air blocks
+                    if block_name == 'air':
+                        continue
+                    
+                    block_list.append({
+                        'x': x,
+                        'y': y,
+                        'z': z,
+                        'block_id': None,  # No numeric ID in new format
+                        'data': 0,  # No separate data value in new format
+                        'name': block_name,
+                        'properties': properties,
+                        'block_state': block_state
+                    })
+    else:
+        # Old format (pre-1.13, uses numeric block IDs)
+        blocks = blocks_data
+        block_data = schematic['Data']
+        
+        # Parse blocks into list of (x, y, z, block_id, data_value)
+        # Schematic stores blocks in YZX order
+        for y in range(height):
+            for z in range(length):
+                for x in range(width):
+                    index = (y * length + z) * width + x
+                    block_id = blocks[index]
+                    data_value = block_data[index]
+                    
+                    # Skip air blocks
+                    if block_id == 0:
+                        continue
+                    
+                    block_list.append({
+                        'x': x,
+                        'y': y,
+                        'z': z,
+                        'block_id': block_id,
+                        'data': data_value,
+                        'name': get_block_name(block_id, data_value)
+                    })
     
     return {
         'width': width,
