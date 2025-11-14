@@ -225,8 +225,15 @@ def export_blueprint(voxel_colors, output_dir, blueprint_name, block_name=None, 
         }
         blueprint["bodies"][0]["childs"].append(part)
     # Write blueprint.json (minified like Scrap Mechanic format)
-    with open(os.path.join(bp_folder, "blueprint.json"), 'w') as f:
-        json.dump(blueprint, f, separators=(',', ':'))
+    blueprint_path = os.path.join(bp_folder, "blueprint.json")
+    try:
+        with open(blueprint_path, 'w') as f:
+            json.dump(blueprint, f, separators=(',', ':'))
+            f.flush()  # Ensure data is written to OS buffer
+            os.fsync(f.fileno())  # Force write to disk
+    except Exception as e:
+        print(f"Error writing blueprint.json: {e}")
+        raise
     # Write description.json matching Scrap Mechanic format
     desc = {
         "description": f"Converted from Minecraft model {blueprint_name}",
@@ -235,8 +242,15 @@ def export_blueprint(voxel_colors, output_dir, blueprint_name, block_name=None, 
         "type": "Blueprint",
         "version": 0
     }
-    with open(os.path.join(bp_folder, "description.json"), 'w') as f:
-        json.dump(desc, f, indent=2)
+    desc_path = os.path.join(bp_folder, "description.json")
+    try:
+        with open(desc_path, 'w') as f:
+            json.dump(desc, f, indent=2)
+            f.flush()  # Ensure data is written to OS buffer
+            os.fsync(f.fileno())  # Force write to disk
+    except Exception as e:
+        print(f"Error writing description.json: {e}")
+        raise
     
     # Generate preview image (icon.png)
     generate_preview_image(voxel_colors, bp_folder)

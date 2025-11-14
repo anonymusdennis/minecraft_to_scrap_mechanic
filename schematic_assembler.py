@@ -816,8 +816,14 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
         
         # Write blueprint.json
         blueprint_path = os.path.join(chunk_bp_folder, "blueprint.json")
-        with open(blueprint_path, 'w') as f:
-            json.dump(chunk_blueprint, f, separators=(',', ':'))
+        try:
+            with open(blueprint_path, 'w') as f:
+                json.dump(chunk_blueprint, f, separators=(',', ':'))
+                f.flush()  # Ensure data is written to OS buffer
+                os.fsync(f.fileno())  # Force write to disk
+        except Exception as e:
+            print(f"Error writing blueprint.json for chunk {chunk_idx+1}: {e}")
+            raise
         
         # Write description.json
         desc = {
@@ -828,8 +834,14 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
             "version": 0
         }
         desc_path = os.path.join(chunk_bp_folder, "description.json")
-        with open(desc_path, 'w') as f:
-            json.dump(desc, f, indent=2)
+        try:
+            with open(desc_path, 'w') as f:
+                json.dump(desc, f, indent=2)
+                f.flush()  # Ensure data is written to OS buffer
+                os.fsync(f.fileno())  # Force write to disk
+        except Exception as e:
+            print(f"Error writing description.json for chunk {chunk_idx+1}: {e}")
+            raise
         
         # Generate preview image from blueprint parts
         if chunk_idx == 0 or len(blueprint_chunks) <= 5:  # Only generate for first chunk or if few chunks to save time
