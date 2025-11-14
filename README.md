@@ -126,9 +126,11 @@ Converts Minecraft .schematic files (NBT format) to JSON.
 python3 schematic_to_json.py <input.schematic> [output.json]
 ```
 
+**Note**: This tool handles the old WorldEdit format (.schematic files). For newer WorldEdit Version 3+ format (.schem files), you can convert them to JSON manually or use them directly if already in JSON format.
+
 ### 4. `schematic_assembler.py` - Schematic Assembler
 
-Assembles a large Scrap Mechanic blueprint from a Minecraft schematic.
+Assembles a large Scrap Mechanic blueprint from a Minecraft schematic. Supports both old (pre-1.13) and new WorldEdit Version 3+ schematic formats.
 
 **New: On-Demand Generation** (Recommended)
 ```bash
@@ -165,7 +167,7 @@ python3 schematic_assembler.py <schematic.json> \
 
 ### Schematic Assembly
 
-1. Parses Minecraft schematic (block IDs and data values)
+1. Parses Minecraft schematic (supports both old format with block IDs and new WorldEdit Version 3+ format with block states)
 2. Matches blocks to generated blueprints
 3. Calculates proper rotations
 4. Combines into one large blueprint
