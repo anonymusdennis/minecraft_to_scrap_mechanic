@@ -496,13 +496,146 @@ def deduplicate_voxels(blueprint):
     return blueprint
 
 
-def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_name, hollow=False, assets_dir=None, generate_on_demand=False):
+def split_blueprint_into_chunks(blueprint, max_voxels_per_chunk=50000, chunk_size=None):
+    """
+    Split a large blueprint into multiple smaller blueprints for easier handling in Scrap Mechanic.
+    
+    This is useful for very large structures that may be difficult to place or load as a single blueprint.
+    The structure is divided into spatial chunks, and each chunk is saved as a separate blueprint.
+    
+    :param blueprint: Blueprint dict with 'bodies' containing 'childs' list
+    :param max_voxels_per_chunk: Maximum number of voxels per chunk (default: 50000)
+    :param chunk_size: Override automatic chunking with fixed chunk size (x, y, z) in voxels
+    :return: List of blueprint dicts, one for each chunk
+    """
+    if not blueprint.get('bodies') or not blueprint['bodies'][0].get('childs'):
+        return [blueprint]
+    
+    parts = blueprint['bodies'][0]['childs']
+    
+    if len(parts) == 0:
+        return [blueprint]
+    
+    # If blueprint is small enough, don't split
+    if len(parts) <= max_voxels_per_chunk:
+        print(f"  Blueprint has {len(parts)} voxels, no splitting needed (threshold: {max_voxels_per_chunk})")
+        return [blueprint]
+    
+    print(f"\n{'='*60}")
+    print(f"Splitting blueprint into chunks...")
+    print(f"  Total voxels: {len(parts)}")
+    print(f"  Max voxels per chunk: {max_voxels_per_chunk}")
+    
+    # Find bounding box
+    min_x = min(p['pos']['x'] for p in parts)
+    max_x = max(p['pos']['x'] for p in parts)
+    min_y = min(p['pos']['y'] for p in parts)
+    max_y = max(p['pos']['y'] for p in parts)
+    min_z = min(p['pos']['z'] for p in parts)
+    max_z = max(p['pos']['z'] for p in parts)
+    
+    total_x = max_x - min_x + 1
+    total_y = max_y - min_y + 1
+    total_z = max_z - min_z + 1
+    
+    print(f"  Bounding box: {total_x} x {total_y} x {total_z} voxels")
+    
+    # Determine chunk size if not specified
+    if chunk_size is None:
+        # Calculate how many chunks we need
+        num_chunks_needed = (len(parts) + max_voxels_per_chunk - 1) // max_voxels_per_chunk
+        
+        # Try to split along the longest axis first, then distribute across other axes
+        # This creates more rectangular chunks rather than thin slices
+        axes = [
+            ('x', total_x, min_x, max_x),
+            ('y', total_y, min_y, max_y),
+            ('z', total_z, min_z, max_z)
+        ]
+        axes.sort(key=lambda a: a[1], reverse=True)  # Sort by size, largest first
+        
+        # Estimate chunks per axis
+        # Start with splitting the longest axis
+        import math
+        splits_per_axis = [1, 1, 1]
+        axis_names = [a[0] for a in axes]
+        
+        # Simple heuristic: try to split evenly across all axes
+        # aiming for roughly cubic chunks
+        volume = total_x * total_y * total_z
+        voxels_per_chunk_target = volume / num_chunks_needed if num_chunks_needed > 0 else volume
+        chunk_dimension = max(1, int(voxels_per_chunk_target ** (1/3)))
+        
+        chunk_x = max(1, int(total_x / max(1, total_x // chunk_dimension)))
+        chunk_y = max(1, int(total_y / max(1, total_y // chunk_dimension)))
+        chunk_z = max(1, int(total_z / max(1, total_z // chunk_dimension)))
+        
+        chunk_size = (chunk_x, chunk_y, chunk_z)
+    
+    chunk_x, chunk_y, chunk_z = chunk_size
+    print(f"  Chunk size: {chunk_x} x {chunk_y} x {chunk_z} voxels")
+    
+    # Calculate number of chunks in each dimension
+    num_chunks_x = (total_x + chunk_x - 1) // chunk_x
+    num_chunks_y = (total_y + chunk_y - 1) // chunk_y
+    num_chunks_z = (total_z + chunk_z - 1) // chunk_z
+    
+    print(f"  Grid: {num_chunks_x} x {num_chunks_y} x {num_chunks_z} = {num_chunks_x * num_chunks_y * num_chunks_z} chunks")
+    
+    # Create chunks
+    chunks = {}
+    
+    for part in parts:
+        pos = part['pos']
+        x, y, z = pos['x'], pos['y'], pos['z']
+        
+        # Determine which chunk this voxel belongs to
+        chunk_idx_x = (x - min_x) // chunk_x
+        chunk_idx_y = (y - min_y) // chunk_y
+        chunk_idx_z = (z - min_z) // chunk_z
+        
+        chunk_key = (chunk_idx_x, chunk_idx_y, chunk_idx_z)
+        
+        if chunk_key not in chunks:
+            chunks[chunk_key] = []
+        
+        chunks[chunk_key].append(part)
+    
+    # Convert chunks dict to list of blueprints
+    blueprint_chunks = []
+    
+    for chunk_key, chunk_parts in sorted(chunks.items()):
+        chunk_blueprint = {
+            "bodies": [{"childs": chunk_parts}],
+            "version": 4
+        }
+        blueprint_chunks.append({
+            'blueprint': chunk_blueprint,
+            'chunk_index': chunk_key,
+            'voxel_count': len(chunk_parts)
+        })
+    
+    # Print chunk statistics
+    print(f"\n  Created {len(blueprint_chunks)} chunks:")
+    for i, chunk_info in enumerate(blueprint_chunks):
+        idx = chunk_info['chunk_index']
+        count = chunk_info['voxel_count']
+        print(f"    Chunk {i+1} ({idx[0]}, {idx[1]}, {idx[2]}): {count} voxels")
+    
+    print(f"{'='*60}\n")
+    
+    return blueprint_chunks
+
+
+def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_name, hollow=False, assets_dir=None, generate_on_demand=False, split_chunks=False, max_voxels_per_chunk=50000):
     """
     Assemble a large blueprint from schematic data using individual block blueprints.
     
     :param hollow: if True, hollow out interior parts to reduce part count
     :param assets_dir: Path to Minecraft assets for on-demand block generation
     :param generate_on_demand: If True, generate missing blocks on-demand instead of using pre-generated blueprints
+    :param split_chunks: if True, split large blueprints into multiple smaller chunks
+    :param max_voxels_per_chunk: maximum voxels per chunk when splitting (default: 50000)
     """
     # Minecraft blocks are 1m cubes, but Scrap Mechanic blocks are made of 16x16x16 voxels (each voxel is 0.25m)
     # Therefore, we need to scale Minecraft coordinates by 16 to get proper Scrap Mechanic voxel positions
@@ -646,36 +779,73 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
         new_count = len(blueprint["bodies"][0]["childs"])
         print(f"  Parts reduced: {original_count} -> {new_count} ({100*(1-new_count/original_count):.1f}% reduction)")
     
-    # Write blueprint.json
-    blueprint_path = os.path.join(bp_folder, "blueprint.json")
-    with open(blueprint_path, 'w') as f:
-        json.dump(blueprint, f, separators=(',', ':'))
+    # Split into chunks if requested
+    blueprint_chunks = []
+    if split_chunks:
+        chunks_info = split_blueprint_into_chunks(blueprint, max_voxels_per_chunk)
+        # Only actually split if we got multiple chunks back
+        if len(chunks_info) > 1:
+            blueprint_chunks = chunks_info
+        else:
+            # Single chunk, treat as normal
+            blueprint_chunks = [{'blueprint': blueprint, 'chunk_index': (0, 0, 0), 'voxel_count': len(blueprint['bodies'][0]['childs'])}]
+    else:
+        # No splitting, single blueprint
+        blueprint_chunks = [{'blueprint': blueprint, 'chunk_index': (0, 0, 0), 'voxel_count': len(blueprint['bodies'][0]['childs'])}]
     
-    # Write description.json
-    desc = {
-        "description": f"Voxel copy of Minecraft schematic - {schematic_data['width']}x{schematic_data['height']}x{schematic_data['length']}",
-        "localId": bp_id,
-        "name": blueprint_name,
-        "type": "Blueprint",
-        "version": 0
-    }
-    desc_path = os.path.join(bp_folder, "description.json")
-    with open(desc_path, 'w') as f:
-        json.dump(desc, f, indent=2)
-    
-    # Generate preview image from blueprint parts
-    print(f"\nGenerating preview image...")
-    voxel_colors = {}
-    for part in blueprint["bodies"][0]["childs"]:
-        pos = part['pos']
-        # Convert hex color back to RGB
-        color_hex = part['color']
-        r = int(color_hex[0:2], 16)
-        g = int(color_hex[2:4], 16)
-        b = int(color_hex[4:6], 16)
-        voxel_colors[(pos['x'], pos['y'], pos['z'])] = (r, g, b, 255)
-    
-    generate_preview_image(voxel_colors, bp_folder)
+    # Save each chunk as a separate blueprint
+    saved_folders = []
+    for chunk_idx, chunk_info in enumerate(blueprint_chunks):
+        chunk_blueprint = chunk_info['blueprint']
+        chunk_pos = chunk_info['chunk_index']
+        
+        # Create unique folder for each chunk
+        if len(blueprint_chunks) > 1:
+            # Multiple chunks - use chunk index in folder name
+            chunk_bp_id = str(uuid4())
+            chunk_bp_folder = os.path.join(output_dir, chunk_bp_id)
+            chunk_name = f"{blueprint_name}_part_{chunk_idx+1}_of_{len(blueprint_chunks)}"
+            chunk_desc = f"Part {chunk_idx+1}/{len(blueprint_chunks)} - Chunk ({chunk_pos[0]}, {chunk_pos[1]}, {chunk_pos[2]}) - {schematic_data['width']}x{schematic_data['height']}x{schematic_data['length']}"
+        else:
+            # Single blueprint
+            chunk_bp_folder = bp_folder
+            chunk_name = blueprint_name
+            chunk_desc = f"Voxel copy of Minecraft schematic - {schematic_data['width']}x{schematic_data['height']}x{schematic_data['length']}"
+        
+        os.makedirs(chunk_bp_folder, exist_ok=True)
+        
+        # Write blueprint.json
+        blueprint_path = os.path.join(chunk_bp_folder, "blueprint.json")
+        with open(blueprint_path, 'w') as f:
+            json.dump(chunk_blueprint, f, separators=(',', ':'))
+        
+        # Write description.json
+        desc = {
+            "description": chunk_desc,
+            "localId": os.path.basename(chunk_bp_folder),
+            "name": chunk_name,
+            "type": "Blueprint",
+            "version": 0
+        }
+        desc_path = os.path.join(chunk_bp_folder, "description.json")
+        with open(desc_path, 'w') as f:
+            json.dump(desc, f, indent=2)
+        
+        # Generate preview image from blueprint parts
+        if chunk_idx == 0 or len(blueprint_chunks) <= 5:  # Only generate for first chunk or if few chunks to save time
+            print(f"\nGenerating preview image for chunk {chunk_idx+1}...")
+        voxel_colors = {}
+        for part in chunk_blueprint["bodies"][0]["childs"]:
+            pos = part['pos']
+            # Convert hex color back to RGB
+            color_hex = part['color']
+            r = int(color_hex[0:2], 16)
+            g = int(color_hex[2:4], 16)
+            b = int(color_hex[4:6], 16)
+            voxel_colors[(pos['x'], pos['y'], pos['z'])] = (r, g, b, 255)
+        
+        generate_preview_image(voxel_colors, chunk_bp_folder)
+        saved_folders.append(chunk_bp_folder)
     
     # Print statistics
     print(f"\n{'='*60}")
@@ -687,8 +857,14 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
     print(f"  Overlapping voxels removed: {stats['overlapping_voxels_removed']}")
     print(f"  Voxels after deduplication: {stats['voxels_after_dedup']}")
     if hollow:
-        print(f"  Final voxel count (after hollowing): {len(blueprint['bodies'][0]['childs'])}")
-    print(f"\n  Final blueprint size: {len(blueprint['bodies'][0]['childs'])} voxels")
+        print(f"  Final voxel count (after hollowing): {sum(c['voxel_count'] for c in blueprint_chunks)}")
+    
+    if len(blueprint_chunks) > 1:
+        print(f"\n  Split into {len(blueprint_chunks)} chunks:")
+        for i, chunk_info in enumerate(blueprint_chunks):
+            print(f"    Chunk {i+1}: {chunk_info['voxel_count']} voxels")
+    else:
+        print(f"\n  Final blueprint size: {blueprint_chunks[0]['voxel_count']} voxels")
     
     if stats['missing_blueprints']:
         print(f"\n  Missing blueprints ({len(stats['missing_blueprints'])}):")
@@ -698,10 +874,16 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
             print(f"    ... and {len(stats['missing_blueprints']) - 10} more")
     
     print(f"\n{'='*60}")
-    print(f"Blueprint saved to: {bp_folder}")
+    if len(saved_folders) > 1:
+        print(f"Blueprints saved to: {output_dir}")
+        print(f"  Created {len(saved_folders)} blueprint chunks")
+        for i, folder in enumerate(saved_folders):
+            print(f"    Part {i+1}: {os.path.basename(folder)}")
+    else:
+        print(f"Blueprint saved to: {saved_folders[0]}")
     print(f"{'='*60}")
     
-    return bp_folder
+    return saved_folders[0] if len(saved_folders) == 1 else output_dir
 
 
 def main():
@@ -746,6 +928,17 @@ def main():
         "--generate-on-demand",
         action="store_true",
         help="Generate block blueprints on-demand instead of using pre-generated blueprints. Requires --assets."
+    )
+    parser.add_argument(
+        "--split",
+        action="store_true",
+        help="Split large blueprints into multiple smaller chunks for easier handling in Scrap Mechanic"
+    )
+    parser.add_argument(
+        "--max-voxels-per-chunk",
+        type=int,
+        default=50000,
+        help="Maximum number of voxels per chunk when splitting (default: 50000)"
     )
     
     args = parser.parse_args()
@@ -794,7 +987,9 @@ def main():
         args.name, 
         hollow=args.hollow,
         assets_dir=args.assets,
-        generate_on_demand=args.generate_on_demand
+        generate_on_demand=args.generate_on_demand,
+        split_chunks=args.split,
+        max_voxels_per_chunk=args.max_voxels_per_chunk
     )
     
     return 0
