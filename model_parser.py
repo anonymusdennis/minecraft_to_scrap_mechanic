@@ -43,12 +43,18 @@ def load_model(model_path, base_dir):
     if "textures" in data:
         # In model JSON, values like "block/stone" mean namespace "minecraft" by default
         for key, tex in data["textures"].items():
-            if ":" in tex:
+            # Normalize keys: remove leading # if present (non-standard but some models use it)
+            normalized_key = key[1:] if key.startswith("#") else key
+            
+            if tex.startswith("#"):
+                # Texture variable reference - keep as-is, don't add namespace
+                model["textures"][normalized_key] = tex
+            elif ":" in tex:
                 # Already has namespace
-                model["textures"][key] = tex
+                model["textures"][normalized_key] = tex
             else:
                 # No namespace, default to "minecraft"
-                model["textures"][key] = "minecraft:" + tex
+                model["textures"][normalized_key] = "minecraft:" + tex
     # If the child defines elements, replace the inherited ones
     if "elements" in data:
         model["elements"] = data["elements"]
@@ -81,6 +87,11 @@ def resolve_model(model, base_dir):
             tex_var = face_data.get("texture")
             if tex_var is None:
                 continue
+            
+            # Handle custom double-hash references (##variable -> #variable)
+            if tex_var.startswith("##"):
+                tex_var = "#" + tex_var[2:]
+            
             if tex_var.startswith("#"):
                 tex_key = tex_var[1:]
                 if tex_key in textures:
@@ -95,10 +106,20 @@ def resolve_model(model, base_dir):
                             depth += 1
                         else:
                             break
+                    # After resolving, check if we still have an unresolved reference
+                    if tex_ref.startswith("#"):
+                        # Still unresolved after recursion
+                        unresolved_key = tex_ref[1:]
+                        # Special case: "missing" is intentionally used for hidden/culled faces
+                        if unresolved_key != "missing":
+                            print(f"Warning: texture variable '{unresolved_key}' not found in model textures, trying as direct path")
+                        tex_ref = unresolved_key
                 else:
                     # Texture variable not found - try using the key name as a direct texture path
                     # This handles cases like "torch" variable that should map to "block/torch"
-                    print(f"Warning: texture variable '{tex_key}' not found in model textures, trying as direct path")
+                    # Special case: "missing" is intentionally used for hidden/culled faces
+                    if tex_key != "missing":
+                        print(f"Warning: texture variable '{tex_key}' not found in model textures, trying as direct path")
                     tex_ref = tex_key  # Fallback to using the key name directly
             else:
                 tex_ref = tex_var

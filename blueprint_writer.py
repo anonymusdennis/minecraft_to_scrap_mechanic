@@ -68,6 +68,42 @@ def rgba_to_hex(rgb):
     # Scrap Mechanic expects uppercase hex with no prefix
     return f"{r:02x}{g:02x}{b:02x}".upper()
 
+def hollow_out_voxels(voxel_colors):
+    """
+    Remove interior voxels from a voxel model, keeping only the outer shell.
+    This significantly reduces the number of parts for large structures.
+    
+    :param voxel_colors: dict of (x,y,z) -> (R,G,B,A)
+    :return: dict of (x,y,z) -> (R,G,B,A) with interior voxels removed
+    """
+    if len(voxel_colors) == 0:
+        return voxel_colors
+    
+    # A voxel is interior if all 6 neighbors exist
+    hollowed = {}
+    
+    for pos, color in voxel_colors.items():
+        x, y, z = pos
+        
+        # Check all 6 neighbors
+        neighbors = [
+            (x+1, y, z), (x-1, y, z),  # X neighbors
+            (x, y+1, z), (x, y-1, z),  # Y neighbors
+            (x, y, z+1), (x, y, z-1)   # Z neighbors
+        ]
+        
+        # If any neighbor is missing, this is a surface voxel
+        is_surface = False
+        for neighbor in neighbors:
+            if neighbor not in voxel_colors:
+                is_surface = True
+                break
+        
+        if is_surface:
+            hollowed[pos] = color
+    
+    return hollowed
+
 def generate_preview_image(voxel_colors, bp_folder, size=128):
     """
     Generate a preview image (icon.png) for the blueprint.
@@ -139,16 +175,23 @@ def generate_preview_image(voxel_colors, bp_folder, size=128):
     icon_path = os.path.join(bp_folder, "icon.png")
     img.save(icon_path, 'PNG')
 
-def export_blueprint(voxel_colors, output_dir, blueprint_name, block_name=None):
+def export_blueprint(voxel_colors, output_dir, blueprint_name, block_name=None, hollow=False):
     """
     Create a Scrap Mechanic blueprint from voxel data.
     :param voxel_colors: dict of (x,y,z) -> (R,G,B,A)
     :param output_dir: directory to create the blueprint folder in
     :param blueprint_name: name to use for the blueprint (for description.json)
     :param block_name: Minecraft block name for material mapping (defaults to blueprint_name)
+    :param hollow: if True, hollow out the interior voxels to reduce part count
     """
     if block_name is None:
         block_name = blueprint_name
+    
+    # Hollow out if requested
+    if hollow:
+        original_count = len(voxel_colors)
+        voxel_colors = hollow_out_voxels(voxel_colors)
+        print(f"  Hollowed: {original_count} -> {len(voxel_colors)} voxels ({100*(1-len(voxel_colors)/original_count):.1f}% reduction)")
     # Generate unique folder name using UUID to avoid collisions
     bp_id = str(uuid4())
     bp_folder = os.path.join(output_dir, bp_id)
