@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/template_lapis_ore",
+  "textures": {
+    "ore": "minecraft:block/lapis_ore"
+  }
+}

@@ -1,0 +1,7 @@
+{
+	"parent": "block/templates/blocks/planks",
+	"textures": {
+		"all": "block/dark_oak_planks",
+		"particle": "block/dark_oak_planks"
+	}
+}

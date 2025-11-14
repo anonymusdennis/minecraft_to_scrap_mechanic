@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:block/cross_triple",
+  "textures": {
+    "cross": "minecraft:block/weeping_vines_plant"
+  }
+}

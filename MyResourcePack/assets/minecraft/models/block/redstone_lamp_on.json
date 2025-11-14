@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:block/template_redstone_lamp",
+  "textures": {
+    "lamp": "minecraft:block/redstone_lamp_on"
+  }
+}

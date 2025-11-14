@@ -1,0 +1,8 @@
+{
+	"__comment":"Made by The_Wild_Thomas (Discord : thomas0535)",
+	"parent":"block/iron_ore",
+	"textures":{
+		"0":"block/deepslate_iron_ore",
+		"particle":"block/deepslate_iron_ore"
+	}
+}

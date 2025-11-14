@@ -1,0 +1,7 @@
+{
+    "parent": "block/templates/stairs/quarter_cubes_outer",
+    "textures": {
+        "all": "block/purpur_block",
+        "particle": "block/purpur_block"
+    }
+}

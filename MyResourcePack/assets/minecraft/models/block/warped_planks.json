@@ -1,0 +1,7 @@
+{
+	"parent": "block/templates/blocks/planks",
+	"textures": {
+		"all": "block/warped_planks",
+		"particle": "block/warped_planks"
+	}
+}

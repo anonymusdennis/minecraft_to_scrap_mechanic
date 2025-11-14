@@ -1,0 +1,8 @@
+{
+	"__comment":"Made by The_Wild_Thomas (Discord : thomas0535)",
+	"parent":"block/lapis_ore",
+	"textures":{
+		"all":"block/deepslate_lapis_ore",
+		"particle":"block/deepslate_lapis_ore"
+	}
+}

@@ -1,0 +1,9 @@
+{
+	"credit": "Made with The_Wild_Thomas (Discord : thomas0535)",
+	"ambientocclusion": false,
+	"parent": "block/torch",
+	"textures": {
+		"0": "block/torch/redstone_torch_off",
+		"particle": "block/torch/redstone_torch_off"
+	}
+}

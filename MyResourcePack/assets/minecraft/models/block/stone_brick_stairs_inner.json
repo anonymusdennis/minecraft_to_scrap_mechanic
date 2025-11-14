@@ -1,0 +1,7 @@
+{
+    "parent": "block/templates/stairs/stone_brick_inner",
+    "textures": {
+        "all": "block/stone_bricks",
+        "particle": "block/stone_bricks"
+    }
+}

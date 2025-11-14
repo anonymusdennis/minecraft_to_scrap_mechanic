@@ -1,0 +1,56 @@
+{
+	"credit": "Made by TheWaschtlPlays using Blockbench",
+	"textures": {
+		"top": "block/vault_top_ejecting"
+	},
+	"elements": [
+		{
+			"from": [2, 14, 2],
+			"to": [5, 14.75, 5],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
+			"faces": {
+				"east": {"uv": [4, 2, 5, 5], "rotation": 90, "texture": "#top", "cullface": "up"},
+				"south": {"uv": [2, 4, 5, 5], "texture": "#top", "cullface": "up"},
+				"up": {"uv": [2, 2, 5, 5], "texture": "#top", "cullface": "up"}
+			}
+		},
+		{
+			"from": [2, 14, 11],
+			"to": [5, 14.75, 14],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
+			"faces": {
+				"north": {"uv": [2, 11, 5, 12], "rotation": 180, "texture": "#top", "cullface": "up"},
+				"east": {"uv": [4, 11, 5, 14], "rotation": 90, "texture": "#top", "cullface": "up"},
+				"up": {"uv": [2, 11, 5, 14], "texture": "#top", "cullface": "up"}
+			}
+		},
+		{
+			"from": [11, 14, 11],
+			"to": [14, 14.75, 14],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
+			"faces": {
+				"north": {"uv": [11, 11, 14, 12], "rotation": 180, "texture": "#top", "cullface": "up"},
+				"west": {"uv": [11, 11, 12, 14], "rotation": 270, "texture": "#top", "cullface": "up"},
+				"up": {"uv": [11, 11, 14, 14], "texture": "#top", "cullface": "up"}
+			}
+		},
+		{
+			"from": [11, 14, 2],
+			"to": [14, 14.75, 5],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
+			"faces": {
+				"south": {"uv": [11, 4, 14, 5], "texture": "#top", "cullface": "up"},
+				"west": {"uv": [11, 2, 12, 5], "rotation": 270, "texture": "#top", "cullface": "up"},
+				"up": {"uv": [11, 2, 14, 5], "texture": "#top", "cullface": "up"}
+			}
+		},
+		{
+			"from": [2, 14, 2],
+			"to": [14, 14, 14],
+			"faces": {
+				"up": {"uv": [2, 2, 14, 14], "texture": "#top", "cullface": "up"},
+				"down": {"uv": [2, 2, 14, 14], "texture": "#top"}
+			}
+		}
+	]
+}

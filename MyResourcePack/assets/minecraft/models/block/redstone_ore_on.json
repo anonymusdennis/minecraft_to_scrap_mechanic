@@ -1,0 +1,8 @@
+{
+	"credit":"Made by The_Wild_Thomas (Discord : thomas0535)",
+	"parent":"block/redstone_ore",
+	"textures":{
+		"all":"block/redstone_ore_on",
+		"particle":"block/redstone_ore_on"
+	}
+}

@@ -1,0 +1,9 @@
+{
+	"__comment":"Made by awildthomas",
+	"ambientocclusion":false,
+	"parent":"block/oak_door_top",
+	"textures":{
+		"0":"block/iron_door_top",
+		"particle":"block/iron_door_top"
+	}
+}

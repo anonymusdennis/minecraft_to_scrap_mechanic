@@ -1,0 +1,8 @@
+{
+	"__comment":"Made by The_Wild_Thomas (Discord : thomas0535)",
+	"parent":"block/powered_rail_raised_ne",
+	"textures":{
+		"rail":"block/powered_rail_on",
+		"particle":"block/powered_rail_on"
+	}
+}

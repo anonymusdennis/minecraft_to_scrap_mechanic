@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/template_coal_ore",
+  "textures": {
+    "ore": "minecraft:block/coal_ore"
+  }
+}

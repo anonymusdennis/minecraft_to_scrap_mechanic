@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/template_gold_ore",
+  "textures": {
+    "ore": "minecraft:block/deepslate_gold_ore"
+  }
+}

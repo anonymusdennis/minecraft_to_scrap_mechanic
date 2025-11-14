@@ -1,0 +1,7 @@
+{
+	"parent": "block/templates/blocks/planks",
+	"textures": {
+		"all": "block/crimson_planks",
+		"particle": "block/crimson_planks"
+	}
+}

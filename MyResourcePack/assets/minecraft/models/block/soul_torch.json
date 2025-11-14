@@ -1,0 +1,9 @@
+{
+	"credit": "Made by The_Wild_Thomas (Discord : thomas0535)",
+	"ambientocclusion": false,
+	"parent": "block/torch",
+	"textures": {
+		"0": "block/torch/soul_torch",
+		"particle": "block/torch/soul_torch"
+	}
+}
