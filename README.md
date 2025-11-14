@@ -44,6 +44,17 @@ pip install Pillow
      ```
      %AppData%\Axolot Games\Scrap Mechanic\User\User_<numbers>\Blueprints\
      ```
+   
+5. **For Large Builds:** Use the `--split` option to automatically divide into manageable chunks:
+   ```bash
+   python3 schematic_assembler.py my_building.json \
+       --assets ./MyResourcePack/assets \
+       --generate-on-demand \
+       --split \
+       -o ./output \
+       -n "MyBuilding"
+   ```
+   See [Blueprint Import Guide](BLUEPRINT_IMPORT_GUIDE.md) for details.
 
 ### Quick Start - Single Command
 
@@ -138,7 +149,9 @@ python3 schematic_assembler.py <schematic.json> \
 
 ## Documentation
 
+- [Blueprint Import Guide](BLUEPRINT_IMPORT_GUIDE.md) - **NEW:** Troubleshooting and splitting large blueprints
 - [Schematic Assembler Guide](SCHEMATIC_ASSEMBLER_README.md) - Detailed guide
+- [Optimization Guide](OPTIMIZATION_GUIDE.md) - Performance improvements
 - [Example Workflow Script](example_workflow.sh) - Automated conversion
 
 ## How It Works

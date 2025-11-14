@@ -71,6 +71,8 @@ python3 schematic_assembler.py your_building.json \
 - `--name` / `-n`: Name for the blueprint (default: `MinecraftSchematic`)
 - `--hollow`: Hollow out the blueprint to remove interior voxels. **This is now the default behavior**
 - `--no-hollow`: Disable hollowing (not recommended - will result in much larger files)
+- `--split`: **NEW** Split large blueprints into multiple smaller chunks for easier handling in Scrap Mechanic
+- `--max-voxels-per-chunk`: Maximum voxels per chunk when splitting (default: 50000)
 
 ## Example
 
@@ -87,6 +89,23 @@ python3 schematic_assembler.py 6901.json \
     -o ./my_builds \
     -n "Medieval_Castle"
 ```
+
+**For Large Builds: With Automatic Splitting**
+
+```bash
+# Convert and assemble with splitting for easier handling
+python3 schematic_to_json.py huge_castle.schematic
+
+python3 schematic_assembler.py huge_castle.json \
+    --assets ./MyResourcePack/assets \
+    --generate-on-demand \
+    --split \
+    --max-voxels-per-chunk 50000 \
+    -o ./my_builds \
+    -n "Huge_Castle"
+```
+
+This will automatically split the blueprint into multiple chunks if it's too large.
 
 **Alternative: Pre-Generated Blueprints**
 
@@ -106,6 +125,40 @@ python3 schematic_assembler.py 6901.json \
 ```
 
 ## How It Works
+
+### Automatic Blueprint Splitting (NEW)
+
+For very large structures that may be difficult to place in Scrap Mechanic, the tool can automatically split them into multiple smaller blueprints:
+
+**When to Use:**
+- Blueprints with more than 50,000 voxels after hollowing
+- Structures that fail to place in-game
+- Builds that cause lag or crashes when placing
+
+**How It Works:**
+1. After hollowing, analyzes the structure's bounding box
+2. Divides into spatial chunks (like a 3D grid)
+3. Creates separate blueprint files for each chunk
+4. Names them sequentially: `Name_part_1_of_X`, `Name_part_2_of_X`, etc.
+
+**Usage:**
+```bash
+python3 schematic_assembler.py my_building.json \
+    --assets ./MyResourcePack/assets \
+    --generate-on-demand \
+    --split \
+    --max-voxels-per-chunk 50000 \
+    -o ./output \
+    -n "MyBuilding"
+```
+
+**In-Game Assembly:**
+1. Copy all chunk folders to your Blueprints directory
+2. Place each chunk in order, carefully aligning them
+3. Use grid mode (G key) for precise placement
+4. The chunks are designed to fit together spatially
+
+See [Blueprint Import Guide](BLUEPRINT_IMPORT_GUIDE.md) for detailed instructions.
 
 ### Intelligent Hollowing (Default Optimization)
 
@@ -213,10 +266,17 @@ To use in Scrap Mechanic:
 
 ### Blueprint is too large or crashes the game
 - **NEW**: Hollowing is now **enabled by default** and provides 95-98% file size reduction
+- **NEW**: Use the `--split` option to automatically divide large blueprints into manageable chunks:
+  ```bash
+  python3 schematic_assembler.py my_building.json --split --max-voxels-per-chunk 50000 ...
+  ```
 - If you disabled hollowing with `--no-hollow`, remove that flag to enable the optimization
 - The intelligent hollowing algorithm keeps only the outer shell (1-2 voxels thick), which is all that's visible
-- If the structure is still too large even with hollowing, consider splitting your schematic into smaller sections
-- Use WorldEdit or similar tools to divide large structures
+- If the structure is still too large even with hollowing and splitting, consider reducing the chunk size:
+  ```bash
+  --max-voxels-per-chunk 30000
+  ```
+- Alternatively, use WorldEdit in Minecraft to manually divide very large structures before conversion
 
 ### Incorrect rotations
 - Some block types may have limited rotation support
