@@ -673,8 +673,7 @@ def main():
     )
     parser.add_argument(
         "--blueprints", "-b",
-        required=True,
-        help="Path to the folder containing generated block blueprints"
+        help="Path to the folder containing pre-generated block blueprints (optional if using --generate-on-demand)"
     )
     parser.add_argument(
         "--output", "-o",
@@ -715,9 +714,27 @@ def main():
         print(f"Error: Schematic file not found: {args.schematic}")
         return 1
     
-    if not os.path.isdir(args.blueprints):
-        print(f"Error: Blueprints folder not found: {args.blueprints}")
-        return 1
+    # Validate blueprint source
+    if args.generate_on_demand:
+        # On-demand generation requires assets directory
+        if not args.assets:
+            print(f"Error: --generate-on-demand requires --assets to be specified")
+            return 1
+        if not os.path.isdir(args.assets):
+            print(f"Error: Assets directory not found: {args.assets}")
+            return 1
+        # Blueprints folder is optional, create empty one if not provided
+        if not args.blueprints:
+            args.blueprints = "./empty_blueprints"
+            os.makedirs(args.blueprints, exist_ok=True)
+    else:
+        # Traditional mode requires blueprints folder
+        if not args.blueprints:
+            print(f"Error: --blueprints is required (or use --generate-on-demand with --assets)")
+            return 1
+        if not os.path.isdir(args.blueprints):
+            print(f"Error: Blueprints folder not found: {args.blueprints}")
+            return 1
     
     # Create output directory
     os.makedirs(args.output, exist_ok=True)

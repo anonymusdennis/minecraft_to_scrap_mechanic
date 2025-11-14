@@ -45,9 +45,29 @@ pip install Pillow
      %AppData%\Axolot Games\Scrap Mechanic\User\User_<numbers>\Blueprints\
      ```
 
-### Simplified Workflow (On-Demand Generation)
+### Quick Start - Single Command
 
-The fastest way to convert a schematic without pre-generating all blocks:
+The fastest way to convert a schematic:
+
+**Windows:**
+```bash
+schematic_to_blue.bat my_building.schematic
+```
+
+**Linux/Mac:**
+```bash
+./schematic_to_blue.sh my_building.schematic
+```
+
+This script automatically:
+- Converts the schematic to JSON
+- Generates blocks on-demand
+- Creates an optimized, hollowed blueprint
+- Uses default folders (`./MyResourcePack/assets`, `./assembled_blueprints`)
+
+### Manual Workflow (More Control)
+
+If you need more control over the process:
 
 ```bash
 # 1. Convert schematic to JSON
