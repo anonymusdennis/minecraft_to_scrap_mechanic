@@ -50,12 +50,23 @@ python3 schematic_assembler.py your_building.json \
     --name "MyBuilding"
 ```
 
+For large structures, use the `--hollow` flag to reduce part count:
+
+```bash
+python3 schematic_assembler.py your_building.json \
+    --blueprints ./block_blueprints \
+    --output ./assembled_blueprints \
+    --name "MyBuilding" \
+    --hollow
+```
+
 ### Arguments
 
 - `schematic`: Path to the Minecraft schematic JSON file (required)
 - `--blueprints` / `-b`: Path to folder containing generated block blueprints (required)
 - `--output` / `-o`: Output directory for assembled blueprint (default: `./assembled_blueprints`)
 - `--name` / `-n`: Name for the blueprint (default: `MinecraftSchematic`)
+- `--hollow`: Hollow out the blueprint to remove interior parts. **Highly recommended for large structures** to prevent crashes and reduce loading times
 
 ## Example
 
@@ -67,14 +78,33 @@ python3 schematic_to_json.py 6901.schematic
 python3 main.py -i ./MyResourcePack/assets -o ./block_blueprints
 python3 generate_essential_blueprints.py ./MyResourcePack/assets ./block_blueprints
 
-# Assemble large blueprint
+# Assemble large blueprint (with hollowing for performance)
 python3 schematic_assembler.py 6901.json \
     -b ./block_blueprints \
     -o ./my_builds \
-    -n "Medieval_Castle"
+    -n "Medieval_Castle" \
+    --hollow
 ```
 
 ## How It Works
+
+### Hollowing (Performance Optimization)
+
+When the `--hollow` flag is used, the assembler removes all interior parts that are completely surrounded by other parts. This:
+- **Reduces part count by 50-70%** for large solid structures
+- **Prevents crashes** when loading huge blueprints in Scrap Mechanic
+- **Improves game performance** significantly
+- **Keeps visual appearance identical** (only the outer shell is visible anyway)
+
+Example part count reductions:
+- 10x10x10 cube: 1,000 → 488 parts (51% reduction)
+- 20x20x20 cube: 8,000 → 2,168 parts (73% reduction)
+
+**Recommendation**: Always use `--hollow` for structures larger than 10x10x10 blocks.
+
+### Preview Images
+
+The assembler automatically generates a preview image (`icon.png`) for your blueprint, showing an isometric view of the structure. This appears in Scrap Mechanic's blueprint selection screen.
 
 ### Block Matching
 
@@ -131,7 +161,8 @@ The assembled blueprint is saved in Scrap Mechanic's standard format:
 output_folder/
   └── <UUID>/
       ├── blueprint.json    # Contains all voxel data
-      └── description.json  # Blueprint metadata
+      ├── description.json  # Blueprint metadata
+      └── icon.png          # Preview image (generated automatically)
 ```
 
 To use in Scrap Mechanic:
@@ -153,9 +184,10 @@ To use in Scrap Mechanic:
 - Gray cubes are used as fallbacks for missing blocks
 - To improve coverage, use a more complete resource pack
 
-### Blueprint is too large
-- Scrap Mechanic has limits on blueprint size
-- Consider splitting your schematic into smaller sections
+### Blueprint is too large or crashes the game
+- Use the `--hollow` flag to remove interior parts and significantly reduce part count (50-70% reduction for large structures)
+- The hollowing feature keeps only the outer shell, which is usually all that's visible anyway
+- If the structure is still too large after hollowing, consider splitting your schematic into smaller sections
 - Use WorldEdit or similar tools to divide large structures
 
 ### Incorrect rotations
