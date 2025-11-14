@@ -105,29 +105,25 @@ python3 schematic_assembler.py huge_city.json \
 
 #### Quick Script
 
-Use the convenience scripts with splitting enabled:
+Use the convenience scripts with splitting enabled by uncommenting the split flags:
 
 **Windows:**
-```batch
-REM Edit schematic_to_blue.bat and add --split flag
-python schematic_assembler.py "%JSON_FILE%" ^
-    --assets "%ASSETS_DIR%" ^
-    --generate-on-demand ^
-    --split ^
-    --output "%OUTPUT_DIR%" ^
-    --name "%BLUEPRINT_NAME%"
-```
+1. Edit `schematic_to_blue.bat`
+2. Uncomment these lines (remove `REM` prefix):
+   ```batch
+   REM     --split ^
+   REM     --max-voxels-per-chunk 50000
+   ```
+3. Run: `schematic_to_blue.bat my_building.schematic`
 
 **Linux/Mac:**
-```bash
-# Edit schematic_to_blue.sh and add --split flag
-python3 schematic_assembler.py "$JSON_FILE" \
-    --assets "$ASSETS_DIR" \
-    --generate-on-demand \
-    --split \
-    --output "$OUTPUT_DIR" \
-    --name "$BLUEPRINT_NAME"
-```
+1. Edit `schematic_to_blue.sh`
+2. Uncomment these lines (remove `#` prefix):
+   ```bash
+   # --split \
+   # --max-voxels-per-chunk 50000
+   ```
+3. Run: `./schematic_to_blue.sh my_building.schematic`
 
 ### Output Format
 

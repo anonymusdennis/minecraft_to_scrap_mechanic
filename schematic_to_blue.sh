@@ -47,11 +47,14 @@ echo ""
 
 # Step 2: Assemble blueprint with on-demand generation
 echo "[2/2] Assembling blueprint with on-demand generation..."
+# Add --split flag for large builds (comment out if not needed)
 python3 schematic_assembler.py "$JSON_FILE" \
     --assets "$ASSETS_DIR" \
     --generate-on-demand \
     --output "$OUTPUT_DIR" \
     --name "$BLUEPRINT_NAME"
+    # --split \
+    # --max-voxels-per-chunk 50000
 
 echo ""
 echo "==================================="
@@ -66,4 +69,7 @@ echo "1. Copy the UUID folder from $OUTPUT_DIR to:"
 echo "   %AppData%\\Axolot Games\\Scrap Mechanic\\User\\User_<numbers>\\Blueprints"
 echo ""
 echo "2. Launch Scrap Mechanic and find '$BLUEPRINT_NAME' in your blueprints"
+echo ""
+echo "NOTE: For very large builds, edit this script to uncomment --split flag"
+echo "      This will automatically divide the blueprint into manageable chunks"
 echo ""
