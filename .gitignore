@@ -37,7 +37,9 @@ Thumbs.db
 # Generated blueprints
 ScrapMechanicBlueprints/
 output/
-test_blueprints/
-generated_blueprints/
+test_blueprints*/
 test_assembled*/
+test_output*/
 assembled_blueprints/
+empty_blueprints/
+generated_blueprints/
