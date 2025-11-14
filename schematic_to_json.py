@@ -197,8 +197,14 @@ def main(argv=None):
     # If you prefer the bare payload, you could instead do:
     # json_obj = root_payload
 
-    with out_path.open("w", encoding="utf-8") as f:
-        json.dump(json_obj, f, ensure_ascii=False, indent=2)
+    try:
+        with out_path.open("w", encoding="utf-8") as f:
+            json.dump(json_obj, f, ensure_ascii=False, indent=2)
+            f.flush()  # Ensure data is written to OS buffer
+            os.fsync(f.fileno())  # Force write to disk
+    except Exception as e:
+        print(f"Error writing JSON to {out_path}: {e}")
+        raise
 
     print("Wrote JSON to {}".format(out_path))
     return 0

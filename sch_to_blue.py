@@ -47,8 +47,15 @@ def create_voxel_copy(schematic_json, output_dir, blueprint_name):
         blueprint_data["bodies"][0]["childs"].append(blueprint_block)
 
     # Save the blueprint to file
-    with open(os.path.join(bp_folder, "blueprint.json"), 'w') as f:
-        json.dump(blueprint_data, f, separators=(',', ':'))
+    blueprint_path = os.path.join(bp_folder, "blueprint.json")
+    try:
+        with open(blueprint_path, 'w') as f:
+            json.dump(blueprint_data, f, separators=(',', ':'))
+            f.flush()  # Ensure data is written to OS buffer
+            os.fsync(f.fileno())  # Force write to disk
+    except Exception as e:
+        print(f"Error writing blueprint.json: {e}")
+        raise
 
     # Save the description file
     desc = {
@@ -58,8 +65,15 @@ def create_voxel_copy(schematic_json, output_dir, blueprint_name):
         "type": "Blueprint",
         "version": 0
     }
-    with open(os.path.join(bp_folder, "description.json"), 'w') as f:
-        json.dump(desc, f, indent=4)
+    desc_path = os.path.join(bp_folder, "description.json")
+    try:
+        with open(desc_path, 'w') as f:
+            json.dump(desc, f, indent=4)
+            f.flush()  # Ensure data is written to OS buffer
+            os.fsync(f.fileno())  # Force write to disk
+    except Exception as e:
+        print(f"Error writing description.json: {e}")
+        raise
 
     print(f"Blueprint for {blueprint_name} saved to: {bp_folder}")
 
