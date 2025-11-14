@@ -14,6 +14,7 @@ import json
 import pathlib
 import struct
 import sys
+import os
 
 # NBT tag type constants
 TAG_End        = 0

@@ -64,6 +64,7 @@ python schematic_assembler.py "%JSON_FILE%" ^
     --blueprints "%BLUEPRINTS_DIR%" ^
     --output "%OUTPUT_DIR%" ^
     --name "%BLUEPRINT_NAME%"
+    --hollow
 if errorlevel 1 goto :error
 
 echo.

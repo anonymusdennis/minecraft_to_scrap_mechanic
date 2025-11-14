@@ -56,9 +56,9 @@ python schematic_assembler.py "%JSON_FILE%" ^
     --assets "%ASSETS_DIR%" ^
     --generate-on-demand ^
     --output "%OUTPUT_DIR%" ^
-    --name "%BLUEPRINT_NAME%"
-REM     --split ^
-REM     --max-voxels-per-chunk 50000
+    --name "%BLUEPRINT_NAME%" 
+REM    --split ^
+REM    --max-voxels-per-chunk 100000
 
 if errorlevel 1 (
     echo Error: Failed to assemble blueprint
