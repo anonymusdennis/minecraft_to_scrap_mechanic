@@ -99,92 +99,10 @@ def voxelize_model(resolved_elements, texture_cache):
                         if k + 0.5 < fz or k + 0.5 >= tz: 
                             continue
                         filled[i][j][k] = True
-    # Hollow out internal voxels - create a shell of max 2 blocks thick
-    # Use distance from surface to determine which voxels to keep
-    # Calculate distance from each voxel to the nearest empty space
-    from collections import deque
     
-    # First, mark all surface voxels (distance 0)
-    distance = [[[999 for _ in range(N)] for _ in range(N)] for _ in range(N)]
-    queue = deque()
-    
-    # Find all surface voxels (voxels with at least one empty neighbor or on boundary)
-    for i in range(N):
-        for j in range(N):
-            for k in range(N):
-                if not filled[i][j][k]:
-                    continue
-                # Check if this is a surface voxel
-                neighbors = [(i-1,j,k), (i+1,j,k), (i,j-1,k), (i,j+1,k), (i,j,k-1), (i,j,k+1)]
-                is_surface = False
-                for (nx, ny, nz) in neighbors:
-                    if nx < 0 or nx >= N or ny < 0 or ny >= N or nz < 0 or nz >= N:
-                        is_surface = True
-                        break
-                    if not filled[nx][ny][nz]:
-                        is_surface = True
-                        break
-                if is_surface:
-                    distance[i][j][k] = 0
-                    queue.append((i, j, k))
-    
-    # BFS to calculate distance from surface for all voxels
-    while queue:
-        i, j, k = queue.popleft()
-        neighbors = [(i-1,j,k), (i+1,j,k), (i,j-1,k), (i,j+1,k), (i,j,k-1), (i,j,k+1)]
-        for (nx, ny, nz) in neighbors:
-            if 0 <= nx < N and 0 <= ny < N and 0 <= nz < N:
-                if filled[nx][ny][nz] and distance[nx][ny][nz] == 999:
-                    distance[nx][ny][nz] = distance[i][j][k] + 1
-                    queue.append((nx, ny, nz))
-    
-    # Keep only voxels within 2 blocks of the surface (shell thickness of max 2)
-    for i in range(N):
-        for j in range(N):
-            for k in range(N):
-                if filled[i][j][k] and distance[i][j][k] >= 2:
-                    filled[i][j][k] = False
-    
-    # Second pass: remove any remaining floating parts (voxels not connected to surface)
-    # Mark all surface-connected voxels
-    surface_connected = [[[False for _ in range(N)] for _ in range(N)] for _ in range(N)]
-    queue = deque()
-    
-    # Start from all surface voxels again
-    for i in range(N):
-        for j in range(N):
-            for k in range(N):
-                if not filled[i][j][k]:
-                    continue
-                neighbors = [(i-1,j,k), (i+1,j,k), (i,j-1,k), (i,j+1,k), (i,j,k-1), (i,j,k+1)]
-                is_surface = False
-                for (nx, ny, nz) in neighbors:
-                    if nx < 0 or nx >= N or ny < 0 or ny >= N or nz < 0 or nz >= N:
-                        is_surface = True
-                        break
-                    if not filled[nx][ny][nz]:
-                        is_surface = True
-                        break
-                if is_surface:
-                    surface_connected[i][j][k] = True
-                    queue.append((i, j, k))
-    
-    # Flood fill to mark all connected surface voxels
-    while queue:
-        i, j, k = queue.popleft()
-        neighbors = [(i-1,j,k), (i+1,j,k), (i,j-1,k), (i,j+1,k), (i,j,k-1), (i,j,k+1)]
-        for (nx, ny, nz) in neighbors:
-            if 0 <= nx < N and 0 <= ny < N and 0 <= nz < N:
-                if filled[nx][ny][nz] and not surface_connected[nx][ny][nz]:
-                    surface_connected[nx][ny][nz] = True
-                    queue.append((nx, ny, nz))
-    
-    # Remove all voxels that aren't surface-connected (floating parts)
-    for i in range(N):
-        for j in range(N):
-            for k in range(N):
-                if filled[i][j][k] and not surface_connected[i][j][k]:
-                    filled[i][j][k] = False
+    # Note: Individual block blueprints are now generated as solid (not hollowed)
+    # This allows proper assembly where adjacent blocks can merge and then be 
+    # hollowed out as a complete structure in the schematic assembler
     # Determine voxel colors
     voxel_colors = {}
     for i in range(0, N):

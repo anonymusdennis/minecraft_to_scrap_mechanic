@@ -15,7 +15,7 @@ import os
 import sys
 from uuid import uuid4
 from block_ids import get_block_name
-from blueprint_writer import generate_preview_image
+from blueprint_writer import generate_preview_image, rgba_to_hex, get_shape_id_for_block
 
 
 def parse_schematic(schematic_path):
@@ -191,15 +191,61 @@ def determine_rotation(block_name, data_value):
     return (xaxis, zaxis)
 
 
-def load_blueprint_blocks(blueprint_folder, block_name):
+def generate_block_on_demand(block_name, assets_dir):
     """
-    Load blocks from a generated blueprint folder.
+    Generate a block blueprint on-demand if it doesn't exist in the cache.
+    Returns list of block voxels with positions and properties.
+    """
+    try:
+        from model_parser import load_model, resolve_model
+        from voxelizer import voxelize_model
+        
+        model_path = f"minecraft:block/{block_name}"
+        model = load_model(model_path, assets_dir)
+        
+        if 'elements' not in model or len(model['elements']) == 0:
+            return None
+            
+        resolved_elems = resolve_model(model, assets_dir)
+        voxel_colors = voxelize_model(resolved_elems, {})
+        
+        if len(voxel_colors) == 0:
+            return None
+        
+        # Convert voxel colors to block format
+        blocks = []
+        shape_id = get_shape_id_for_block(block_name)
+        
+        for (x, y, z), color in voxel_colors.items():
+            # Skip fully transparent voxels
+            if len(color) > 3 and color[3] == 0:
+                continue
+            
+            blocks.append({
+                'pos': {'x': x, 'y': z, 'z': y},  # Note: pos.y = z index, pos.z = y index
+                'color': rgba_to_hex(color),
+                'shapeId': shape_id,
+                'bounds': {'x': 1, 'y': 1, 'z': 1}
+            })
+        
+        return blocks
+    except Exception as e:
+        # Block model not found or error generating
+        return None
+
+
+def load_blueprint_blocks(blueprint_folder, block_name, assets_dir=None, generate_on_demand=False):
+    """
+    Load blocks from a generated blueprint folder, or generate on-demand if enabled.
     Returns list of block dicts with relative positions and properties.
     """
     # Try to find the blueprint by name
     # Blueprints are stored in UUID folders with description.json containing the name
     
     if not os.path.isdir(blueprint_folder):
+        if generate_on_demand and assets_dir:
+            # Generate block on-demand
+            return generate_block_on_demand(block_name, assets_dir) or []
         print(f"Warning: Blueprint folder not found: {blueprint_folder}")
         return []
     
@@ -277,7 +323,11 @@ def load_blueprint_blocks(blueprint_folder, block_name):
             print(f"Error loading blueprint {folder_path}: {e}")
             continue
     
-    # Blueprint not found
+    # Blueprint not found in cache
+    if generate_on_demand and assets_dir:
+        # Generate block on-demand
+        return generate_block_on_demand(block_name, assets_dir) or []
+    
     return []
 
 
@@ -306,11 +356,18 @@ def rotate_position(pos, xaxis, zaxis):
 
 def hollow_out_blueprint(blueprint):
     """
-    Remove interior parts from a blueprint, keeping only the outer shell.
-    This significantly reduces part count for large structures.
+    Intelligently remove interior voxels from a blueprint to reduce part count
+    while maintaining structural integrity.
+    
+    Strategy:
+    1. Keep all surface voxels (those with at least one empty neighbor)
+    2. Use BFS to calculate distance from surface for each voxel
+    3. Remove voxels that are far from surface (interior)
+    4. Use 1-thick walls where possible, but keep thicker walls to prevent
+       floating parts or structural issues
     
     :param blueprint: Blueprint dict with 'bodies' containing 'childs' list
-    :return: Modified blueprint with interior parts removed
+    :return: Modified blueprint with interior voxels removed
     """
     if not blueprint.get('bodies') or not blueprint['bodies'][0].get('childs'):
         return blueprint
@@ -320,16 +377,20 @@ def hollow_out_blueprint(blueprint):
     if len(parts) == 0:
         return blueprint
     
-    # Build a set of all occupied positions
+    # Build a map of all occupied positions
     position_map = {}
     for i, part in enumerate(parts):
         pos = part['pos']
         key = (pos['x'], pos['y'], pos['z'])
         position_map[key] = i
     
-    # Determine which parts are on the surface
-    surface_parts = []
+    # Calculate distance from surface for each voxel using BFS
+    from collections import deque
     
+    distance = {}
+    queue = deque()
+    
+    # Find all surface voxels (distance 0)
     for part in parts:
         pos = part['pos']
         x, y, z = pos['x'], pos['y'], pos['z']
@@ -341,7 +402,7 @@ def hollow_out_blueprint(blueprint):
             (x, y, z+1), (x, y, z-1)
         ]
         
-        # If any neighbor is missing, this is a surface part
+        # If any neighbor is missing, this is a surface voxel
         is_surface = False
         for neighbor in neighbors:
             if neighbor not in position_map:
@@ -349,20 +410,114 @@ def hollow_out_blueprint(blueprint):
                 break
         
         if is_surface:
-            surface_parts.append(part)
+            key = (x, y, z)
+            distance[key] = 0
+            queue.append(key)
     
-    # Update blueprint with only surface parts
-    blueprint['bodies'][0]['childs'] = surface_parts
+    # BFS to calculate distance from surface
+    while queue:
+        current = queue.popleft()
+        x, y, z = current
+        current_dist = distance[current]
+        
+        # Check all 6 neighbors
+        neighbors = [
+            (x+1, y, z), (x-1, y, z),
+            (x, y+1, z), (x, y-1, z),
+            (x, y, z+1), (x, y, z-1)
+        ]
+        
+        for neighbor in neighbors:
+            if neighbor in position_map and neighbor not in distance:
+                distance[neighbor] = current_dist + 1
+                queue.append(neighbor)
+    
+    # Keep voxels based on distance from surface
+    # Use adaptive thickness: keep voxels within distance 1 of surface
+    # (This creates a 1-2 voxel thick shell depending on geometry)
+    kept_parts = []
+    
+    for part in parts:
+        pos = part['pos']
+        key = (pos['x'], pos['y'], pos['z'])
+        
+        # Keep if on surface or very close to it
+        if distance.get(key, 0) <= 1:
+            kept_parts.append(part)
+    
+    # Verify connectivity - ensure no floating parts
+    # Mark all surface-connected voxels
+    if len(kept_parts) > 0:
+        connected = set()
+        queue = deque()
+        
+        # Start from any surface voxel
+        first_key = None
+        for part in kept_parts:
+            pos = part['pos']
+            key = (pos['x'], pos['y'], pos['z'])
+            if distance.get(key, 0) == 0:
+                first_key = key
+                break
+        
+        if first_key:
+            connected.add(first_key)
+            queue.append(first_key)
+            
+            # Build position map for kept parts only
+            kept_position_map = {}
+            for i, part in enumerate(kept_parts):
+                pos = part['pos']
+                key = (pos['x'], pos['y'], pos['z'])
+                kept_position_map[key] = i
+            
+            # Flood fill to find all connected voxels
+            while queue:
+                current = queue.popleft()
+                x, y, z = current
+                
+                neighbors = [
+                    (x+1, y, z), (x-1, y, z),
+                    (x, y+1, z), (x, y-1, z),
+                    (x, y, z+1), (x, y, z-1)
+                ]
+                
+                for neighbor in neighbors:
+                    if neighbor in kept_position_map and neighbor not in connected:
+                        connected.add(neighbor)
+                        queue.append(neighbor)
+            
+            # Keep only connected parts
+            final_parts = []
+            for part in kept_parts:
+                pos = part['pos']
+                key = (pos['x'], pos['y'], pos['z'])
+                if key in connected:
+                    final_parts.append(part)
+            
+            kept_parts = final_parts
+    
+    # Update blueprint with kept parts
+    blueprint['bodies'][0]['childs'] = kept_parts
     
     return blueprint
 
-def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_name, hollow=False):
+def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_name, hollow=False, assets_dir=None, generate_on_demand=False):
     """
     Assemble a large blueprint from schematic data using individual block blueprints.
     
     :param hollow: if True, hollow out interior parts to reduce part count
+    :param assets_dir: Path to Minecraft assets for on-demand block generation
+    :param generate_on_demand: If True, generate missing blocks on-demand instead of using pre-generated blueprints
     """
     print(f"Assembling blueprint from {len(schematic_data['blocks'])} blocks...")
+    
+    if generate_on_demand:
+        if not assets_dir:
+            print("Warning: On-demand generation requested but no assets_dir provided. Falling back to pre-generated blueprints.")
+            generate_on_demand = False
+        else:
+            print(f"On-demand block generation enabled. Blocks will be generated as needed from {assets_dir}")
     
     # Create output folder
     bp_id = str(uuid4())
@@ -408,7 +563,7 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
         if block_name in blueprint_cache:
             block_blueprints = blueprint_cache[block_name]
         else:
-            block_blueprints = load_blueprint_blocks(blueprints_folder, block_name)
+            block_blueprints = load_blueprint_blocks(blueprints_folder, block_name, assets_dir, generate_on_demand)
             blueprint_cache[block_name] = block_blueprints
         
         if not block_blueprints:
@@ -518,8 +673,7 @@ def main():
     )
     parser.add_argument(
         "--blueprints", "-b",
-        required=True,
-        help="Path to the folder containing generated block blueprints"
+        help="Path to the folder containing pre-generated block blueprints (optional if using --generate-on-demand)"
     )
     parser.add_argument(
         "--output", "-o",
@@ -534,7 +688,23 @@ def main():
     parser.add_argument(
         "--hollow",
         action="store_true",
-        help="Hollow out the blueprint to remove interior parts and reduce part count. Recommended for large structures to prevent crashes."
+        default=True,
+        help="Hollow out the blueprint to remove interior voxels and reduce part count. This is now the default behavior. Use --no-hollow to disable."
+    )
+    parser.add_argument(
+        "--no-hollow",
+        dest="hollow",
+        action="store_false",
+        help="Disable hollowing (not recommended for large structures)"
+    )
+    parser.add_argument(
+        "--assets", "-a",
+        help="Path to Minecraft assets directory for on-demand block generation (e.g., ./MyResourcePack/assets)"
+    )
+    parser.add_argument(
+        "--generate-on-demand",
+        action="store_true",
+        help="Generate block blueprints on-demand instead of using pre-generated blueprints. Requires --assets."
     )
     
     args = parser.parse_args()
@@ -544,9 +714,27 @@ def main():
         print(f"Error: Schematic file not found: {args.schematic}")
         return 1
     
-    if not os.path.isdir(args.blueprints):
-        print(f"Error: Blueprints folder not found: {args.blueprints}")
-        return 1
+    # Validate blueprint source
+    if args.generate_on_demand:
+        # On-demand generation requires assets directory
+        if not args.assets:
+            print(f"Error: --generate-on-demand requires --assets to be specified")
+            return 1
+        if not os.path.isdir(args.assets):
+            print(f"Error: Assets directory not found: {args.assets}")
+            return 1
+        # Blueprints folder is optional, create empty one if not provided
+        if not args.blueprints:
+            args.blueprints = "./empty_blueprints"
+            os.makedirs(args.blueprints, exist_ok=True)
+    else:
+        # Traditional mode requires blueprints folder
+        if not args.blueprints:
+            print(f"Error: --blueprints is required (or use --generate-on-demand with --assets)")
+            return 1
+        if not os.path.isdir(args.blueprints):
+            print(f"Error: Blueprints folder not found: {args.blueprints}")
+            return 1
     
     # Create output directory
     os.makedirs(args.output, exist_ok=True)
@@ -558,7 +746,15 @@ def main():
     print(f"  Non-air blocks: {len(schematic_data['blocks'])}")
     
     # Assemble blueprint
-    assemble_blueprint(schematic_data, args.blueprints, args.output, args.name, hollow=args.hollow)
+    assemble_blueprint(
+        schematic_data, 
+        args.blueprints, 
+        args.output, 
+        args.name, 
+        hollow=args.hollow,
+        assets_dir=args.assets,
+        generate_on_demand=args.generate_on_demand
+    )
     
     return 0
 

@@ -45,6 +45,42 @@ pip install Pillow
      %AppData%\Axolot Games\Scrap Mechanic\User\User_<numbers>\Blueprints\
      ```
 
+### Quick Start - Single Command
+
+The fastest way to convert a schematic:
+
+**Windows:**
+```bash
+schematic_to_blue.bat my_building.schematic
+```
+
+**Linux/Mac:**
+```bash
+./schematic_to_blue.sh my_building.schematic
+```
+
+This script automatically:
+- Converts the schematic to JSON
+- Generates blocks on-demand
+- Creates an optimized, hollowed blueprint
+- Uses default folders (`./MyResourcePack/assets`, `./assembled_blueprints`)
+
+### Manual Workflow (More Control)
+
+If you need more control over the process:
+
+```bash
+# 1. Convert schematic to JSON
+python3 schematic_to_json.py my_building.schematic
+
+# 2. Assemble with on-demand block generation
+python3 schematic_assembler.py my_building.json \
+    --assets ./MyResourcePack/assets \
+    --generate-on-demand \
+    -o ./output \
+    -n "MyBuilding"
+```
+
 ### Automated Workflow
 
 Use the example workflow script:
@@ -83,8 +119,21 @@ python3 schematic_to_json.py <input.schematic> [output.json]
 
 Assembles a large Scrap Mechanic blueprint from a Minecraft schematic.
 
+**New: On-Demand Generation** (Recommended)
 ```bash
-python3 schematic_assembler.py <schematic.json> -b <blueprints_dir> -o <output_dir> -n <name>
+python3 schematic_assembler.py <schematic.json> \
+    --assets <assets_dir> \
+    --generate-on-demand \
+    -o <output_dir> \
+    -n <name>
+```
+
+**Traditional: Using Pre-Generated Blueprints**
+```bash
+python3 schematic_assembler.py <schematic.json> \
+    -b <blueprints_dir> \
+    -o <output_dir> \
+    -n <name>
 ```
 
 ## Documentation
