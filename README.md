@@ -84,8 +84,15 @@ If you need more control over the process:
 # 1. Convert schematic to JSON
 python3 schematic_to_json.py my_building.schematic
 
-# 2. Assemble with on-demand block generation
+# 2. (Recommended) Generate essential blueprints for special blocks
+#    These include entity blocks (chest, bed), thin blocks (glass, iron_bars),
+#    and multi-part blocks (doors, trapdoors, snow layers, bells, scaffolding)
+python3 generate_essential_blueprints.py ./MyResourcePack/assets ./blueprints
+
+# 3. Assemble with hybrid approach (pre-generated + on-demand)
+#    Uses pre-generated blueprints first, then generates on-demand if needed
 python3 schematic_assembler.py my_building.json \
+    -b ./blueprints \
     --assets ./MyResourcePack/assets \
     --generate-on-demand \
     -o ./output \
@@ -112,7 +119,11 @@ python3 main.py -i <assets_dir> -o <output_dir>
 
 ### 2. `generate_essential_blueprints.py` - Essential Blocks Generator
 
-Generates commonly-used blocks that might be missed by main.py.
+Generates commonly-used blocks that might be missed by main.py or are special cases:
+- **Entity blocks**: chest, bed (blocks that use entity models in Minecraft)
+- **Thin geometry blocks**: glass, iron_bars (blocks with very thin elements that don't voxelize well)
+- **Multi-part blocks**: doors, trapdoors, snow layers, bells, scaffolding
+- **Stained glass panes**: All 16 color variants
 
 ```bash
 python3 generate_essential_blueprints.py <assets_dir> <output_dir>
