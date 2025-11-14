@@ -306,11 +306,18 @@ def rotate_position(pos, xaxis, zaxis):
 
 def hollow_out_blueprint(blueprint):
     """
-    Remove interior parts from a blueprint, keeping only the outer shell.
-    This significantly reduces part count for large structures.
+    Intelligently remove interior voxels from a blueprint to reduce part count
+    while maintaining structural integrity.
+    
+    Strategy:
+    1. Keep all surface voxels (those with at least one empty neighbor)
+    2. Use BFS to calculate distance from surface for each voxel
+    3. Remove voxels that are far from surface (interior)
+    4. Use 1-thick walls where possible, but keep thicker walls to prevent
+       floating parts or structural issues
     
     :param blueprint: Blueprint dict with 'bodies' containing 'childs' list
-    :return: Modified blueprint with interior parts removed
+    :return: Modified blueprint with interior voxels removed
     """
     if not blueprint.get('bodies') or not blueprint['bodies'][0].get('childs'):
         return blueprint
@@ -320,16 +327,20 @@ def hollow_out_blueprint(blueprint):
     if len(parts) == 0:
         return blueprint
     
-    # Build a set of all occupied positions
+    # Build a map of all occupied positions
     position_map = {}
     for i, part in enumerate(parts):
         pos = part['pos']
         key = (pos['x'], pos['y'], pos['z'])
         position_map[key] = i
     
-    # Determine which parts are on the surface
-    surface_parts = []
+    # Calculate distance from surface for each voxel using BFS
+    from collections import deque
     
+    distance = {}
+    queue = deque()
+    
+    # Find all surface voxels (distance 0)
     for part in parts:
         pos = part['pos']
         x, y, z = pos['x'], pos['y'], pos['z']
@@ -341,7 +352,7 @@ def hollow_out_blueprint(blueprint):
             (x, y, z+1), (x, y, z-1)
         ]
         
-        # If any neighbor is missing, this is a surface part
+        # If any neighbor is missing, this is a surface voxel
         is_surface = False
         for neighbor in neighbors:
             if neighbor not in position_map:
@@ -349,10 +360,95 @@ def hollow_out_blueprint(blueprint):
                 break
         
         if is_surface:
-            surface_parts.append(part)
+            key = (x, y, z)
+            distance[key] = 0
+            queue.append(key)
     
-    # Update blueprint with only surface parts
-    blueprint['bodies'][0]['childs'] = surface_parts
+    # BFS to calculate distance from surface
+    while queue:
+        current = queue.popleft()
+        x, y, z = current
+        current_dist = distance[current]
+        
+        # Check all 6 neighbors
+        neighbors = [
+            (x+1, y, z), (x-1, y, z),
+            (x, y+1, z), (x, y-1, z),
+            (x, y, z+1), (x, y, z-1)
+        ]
+        
+        for neighbor in neighbors:
+            if neighbor in position_map and neighbor not in distance:
+                distance[neighbor] = current_dist + 1
+                queue.append(neighbor)
+    
+    # Keep voxels based on distance from surface
+    # Use adaptive thickness: keep voxels within distance 1 of surface
+    # (This creates a 1-2 voxel thick shell depending on geometry)
+    kept_parts = []
+    
+    for part in parts:
+        pos = part['pos']
+        key = (pos['x'], pos['y'], pos['z'])
+        
+        # Keep if on surface or very close to it
+        if distance.get(key, 0) <= 1:
+            kept_parts.append(part)
+    
+    # Verify connectivity - ensure no floating parts
+    # Mark all surface-connected voxels
+    if len(kept_parts) > 0:
+        connected = set()
+        queue = deque()
+        
+        # Start from any surface voxel
+        first_key = None
+        for part in kept_parts:
+            pos = part['pos']
+            key = (pos['x'], pos['y'], pos['z'])
+            if distance.get(key, 0) == 0:
+                first_key = key
+                break
+        
+        if first_key:
+            connected.add(first_key)
+            queue.append(first_key)
+            
+            # Build position map for kept parts only
+            kept_position_map = {}
+            for i, part in enumerate(kept_parts):
+                pos = part['pos']
+                key = (pos['x'], pos['y'], pos['z'])
+                kept_position_map[key] = i
+            
+            # Flood fill to find all connected voxels
+            while queue:
+                current = queue.popleft()
+                x, y, z = current
+                
+                neighbors = [
+                    (x+1, y, z), (x-1, y, z),
+                    (x, y+1, z), (x, y-1, z),
+                    (x, y, z+1), (x, y, z-1)
+                ]
+                
+                for neighbor in neighbors:
+                    if neighbor in kept_position_map and neighbor not in connected:
+                        connected.add(neighbor)
+                        queue.append(neighbor)
+            
+            # Keep only connected parts
+            final_parts = []
+            for part in kept_parts:
+                pos = part['pos']
+                key = (pos['x'], pos['y'], pos['z'])
+                if key in connected:
+                    final_parts.append(part)
+            
+            kept_parts = final_parts
+    
+    # Update blueprint with kept parts
+    blueprint['bodies'][0]['childs'] = kept_parts
     
     return blueprint
 
@@ -534,7 +630,14 @@ def main():
     parser.add_argument(
         "--hollow",
         action="store_true",
-        help="Hollow out the blueprint to remove interior parts and reduce part count. Recommended for large structures to prevent crashes."
+        default=True,
+        help="Hollow out the blueprint to remove interior voxels and reduce part count. This is now the default behavior. Use --no-hollow to disable."
+    )
+    parser.add_argument(
+        "--no-hollow",
+        dest="hollow",
+        action="store_false",
+        help="Disable hollowing (not recommended for large structures)"
     )
     
     args = parser.parse_args()
