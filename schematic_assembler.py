@@ -15,7 +15,7 @@ import os
 import sys
 from uuid import uuid4
 from block_ids import get_block_name
-from blueprint_writer import generate_preview_image
+from blueprint_writer import generate_preview_image, rgba_to_hex, get_shape_id_for_block
 
 
 def parse_schematic(schematic_path):
@@ -191,15 +191,61 @@ def determine_rotation(block_name, data_value):
     return (xaxis, zaxis)
 
 
-def load_blueprint_blocks(blueprint_folder, block_name):
+def generate_block_on_demand(block_name, assets_dir):
     """
-    Load blocks from a generated blueprint folder.
+    Generate a block blueprint on-demand if it doesn't exist in the cache.
+    Returns list of block voxels with positions and properties.
+    """
+    try:
+        from model_parser import load_model, resolve_model
+        from voxelizer import voxelize_model
+        
+        model_path = f"minecraft:block/{block_name}"
+        model = load_model(model_path, assets_dir)
+        
+        if 'elements' not in model or len(model['elements']) == 0:
+            return None
+            
+        resolved_elems = resolve_model(model, assets_dir)
+        voxel_colors = voxelize_model(resolved_elems, {})
+        
+        if len(voxel_colors) == 0:
+            return None
+        
+        # Convert voxel colors to block format
+        blocks = []
+        shape_id = get_shape_id_for_block(block_name)
+        
+        for (x, y, z), color in voxel_colors.items():
+            # Skip fully transparent voxels
+            if len(color) > 3 and color[3] == 0:
+                continue
+            
+            blocks.append({
+                'pos': {'x': x, 'y': z, 'z': y},  # Note: pos.y = z index, pos.z = y index
+                'color': rgba_to_hex(color),
+                'shapeId': shape_id,
+                'bounds': {'x': 1, 'y': 1, 'z': 1}
+            })
+        
+        return blocks
+    except Exception as e:
+        # Block model not found or error generating
+        return None
+
+
+def load_blueprint_blocks(blueprint_folder, block_name, assets_dir=None, generate_on_demand=False):
+    """
+    Load blocks from a generated blueprint folder, or generate on-demand if enabled.
     Returns list of block dicts with relative positions and properties.
     """
     # Try to find the blueprint by name
     # Blueprints are stored in UUID folders with description.json containing the name
     
     if not os.path.isdir(blueprint_folder):
+        if generate_on_demand and assets_dir:
+            # Generate block on-demand
+            return generate_block_on_demand(block_name, assets_dir) or []
         print(f"Warning: Blueprint folder not found: {blueprint_folder}")
         return []
     
@@ -277,7 +323,11 @@ def load_blueprint_blocks(blueprint_folder, block_name):
             print(f"Error loading blueprint {folder_path}: {e}")
             continue
     
-    # Blueprint not found
+    # Blueprint not found in cache
+    if generate_on_demand and assets_dir:
+        # Generate block on-demand
+        return generate_block_on_demand(block_name, assets_dir) or []
+    
     return []
 
 
@@ -452,13 +502,22 @@ def hollow_out_blueprint(blueprint):
     
     return blueprint
 
-def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_name, hollow=False):
+def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_name, hollow=False, assets_dir=None, generate_on_demand=False):
     """
     Assemble a large blueprint from schematic data using individual block blueprints.
     
     :param hollow: if True, hollow out interior parts to reduce part count
+    :param assets_dir: Path to Minecraft assets for on-demand block generation
+    :param generate_on_demand: If True, generate missing blocks on-demand instead of using pre-generated blueprints
     """
     print(f"Assembling blueprint from {len(schematic_data['blocks'])} blocks...")
+    
+    if generate_on_demand:
+        if not assets_dir:
+            print("Warning: On-demand generation requested but no assets_dir provided. Falling back to pre-generated blueprints.")
+            generate_on_demand = False
+        else:
+            print(f"On-demand block generation enabled. Blocks will be generated as needed from {assets_dir}")
     
     # Create output folder
     bp_id = str(uuid4())
@@ -504,7 +563,7 @@ def assemble_blueprint(schematic_data, blueprints_folder, output_dir, blueprint_
         if block_name in blueprint_cache:
             block_blueprints = blueprint_cache[block_name]
         else:
-            block_blueprints = load_blueprint_blocks(blueprints_folder, block_name)
+            block_blueprints = load_blueprint_blocks(blueprints_folder, block_name, assets_dir, generate_on_demand)
             blueprint_cache[block_name] = block_blueprints
         
         if not block_blueprints:
@@ -639,6 +698,15 @@ def main():
         action="store_false",
         help="Disable hollowing (not recommended for large structures)"
     )
+    parser.add_argument(
+        "--assets", "-a",
+        help="Path to Minecraft assets directory for on-demand block generation (e.g., ./MyResourcePack/assets)"
+    )
+    parser.add_argument(
+        "--generate-on-demand",
+        action="store_true",
+        help="Generate block blueprints on-demand instead of using pre-generated blueprints. Requires --assets."
+    )
     
     args = parser.parse_args()
     
@@ -661,7 +729,15 @@ def main():
     print(f"  Non-air blocks: {len(schematic_data['blocks'])}")
     
     # Assemble blueprint
-    assemble_blueprint(schematic_data, args.blueprints, args.output, args.name, hollow=args.hollow)
+    assemble_blueprint(
+        schematic_data, 
+        args.blueprints, 
+        args.output, 
+        args.name, 
+        hollow=args.hollow,
+        assets_dir=args.assets,
+        generate_on_demand=args.generate_on_demand
+    )
     
     return 0
 
